@@ -1,10 +1,6 @@
-import config.database;
-import java.sql.SQLException;
+import javafx.application.Application;
+import view.CrudApp;
 
 void main() {
-    try (var connection = database.getConnection()) {
-        System.out.println("Conexion exitosa: " + (connection != null && !connection.isClosed()));
-    } catch (SQLException e) {
-        e.printStackTrace();
-    }
+    Application.launch(CrudApp.class);
 }
