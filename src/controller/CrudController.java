@@ -1,68 +1,101 @@
 package controller;
 
-import model.Cliente;
-
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CrudController {
     private Connection conn;
 
     public boolean connect(String host, String port, String dbName, String user, String password) throws SQLException {
-        var url = String.format("jdbc:postgresql://%s:%s/%s", host, port, dbName);
+        var url = "jdbc:postgresql://%s:%s/%s".formatted(host, port, dbName);
         conn = DriverManager.getConnection(url, user, password);
-        createTableIfNotExists();
         return conn != null && !conn.isClosed();
     }
 
-    private void createTableIfNotExists() throws SQLException {
-        var sql = "CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, correo TEXT);";
-        try (var stmt = conn.createStatement()) {
-            stmt.execute(sql);
+    public List<String> listTables() throws SQLException {
+        var tables = new ArrayList<String>();
+        var meta = conn.getMetaData();
+        try (var rs = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+            while (rs.next()) {
+                tables.add(rs.getString("TABLE_NAME"));
+            }
         }
+        return tables;
     }
 
-    public Cliente createCliente(String nombre, String correo) throws SQLException {
-        var sql = "INSERT INTO clientes (nombre, correo) VALUES (?, ?) RETURNING id";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, nombre);
-            ps.setString(2, correo);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    int id = rs.getInt(1);
-                    return new Cliente(id, nombre, correo);
-                }
+    public List<String> listColumns(String table) throws SQLException {
+        var cols = new ArrayList<String>();
+        var meta = conn.getMetaData();
+        try (var rs = meta.getColumns(null, null, table, "%")) {
+            while (rs.next()) {
+                cols.add(rs.getString("COLUMN_NAME"));
             }
+        }
+        return cols;
+    }
+
+    public String getPrimaryKey(String table) throws SQLException {
+        var meta = conn.getMetaData();
+        try (var rs = meta.getPrimaryKeys(null, null, table)) {
+            if (rs.next()) return rs.getString("COLUMN_NAME");
         }
         return null;
     }
 
-    public List<Cliente> readAllClientes() throws SQLException {
-        var list = new ArrayList<Cliente>();
-        var sql = "SELECT id, nombre, correo FROM clientes ORDER BY id";
+    public List<Map<String, Object>> readTable(String table) throws SQLException {
+        var list = new ArrayList<Map<String, Object>>();
+        var sql = "SELECT * FROM " + table;
         try (var stmt = conn.createStatement(); var rs = stmt.executeQuery(sql)) {
+            var md = rs.getMetaData();
+            var colCount = md.getColumnCount();
             while (rs.next()) {
-                list.add(new Cliente(rs.getInt("id"), rs.getString("nombre"), rs.getString("correo")));
+                var row = new LinkedHashMap<String, Object>();
+                for (var i = 1; i <= colCount; i++) {
+                    row.put(md.getColumnLabel(i), rs.getObject(i));
+                }
+                list.add(row);
             }
         }
         return list;
     }
 
-    public boolean updateCliente(Cliente c) throws SQLException {
-        var sql = "UPDATE clientes SET nombre = ?, correo = ? WHERE id = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, c.getNombre());
-            ps.setString(2, c.getCorreo());
-            ps.setInt(3, c.getId());
+    public Map<String, Object> insertRow(String table, Map<String, Object> values) throws SQLException {
+        if (values.isEmpty()) return null;
+        var cols = String.join(", ", values.keySet());
+        var marks = String.join(", ", Collections.nCopies(values.size(), "?"));
+        var sql = "INSERT INTO " + table + " (" + cols + ") VALUES (" + marks + ")";
+        try (var ps = conn.prepareStatement(sql)) {
+            var i = 1;
+            for (var v : values.values()) ps.setObject(i++, v);
+            ps.executeUpdate();
+        }
+        return values;
+    }
+
+    public boolean updateRow(String table, String pkColumn, Object pkValue, Map<String, Object> values) throws SQLException {
+        if (values.isEmpty()) return false;
+        var sets = new StringBuilder();
+        for (var k : values.keySet()) {
+            if (!sets.isEmpty()) sets.append(", ");
+            sets.append(k).append(" = ?");
+        }
+        var sql = "UPDATE " + table + " SET " + sets + " WHERE " + pkColumn + " = ?";
+        try (var ps = conn.prepareStatement(sql)) {
+            var i = 1;
+            for (var v : values.values()) ps.setObject(i++, v);
+            ps.setObject(i, pkValue);
             return ps.executeUpdate() > 0;
         }
     }
 
-    public boolean deleteCliente(int id) throws SQLException {
-        var sql = "DELETE FROM clientes WHERE id = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, id);
+    public boolean deleteRow(String table, String pkColumn, Object pkValue) throws SQLException {
+        var sql = "DELETE FROM " + table + " WHERE " + pkColumn + " = ?";
+        try (var ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, pkValue);
             return ps.executeUpdate() > 0;
         }
     }
@@ -74,4 +107,21 @@ public class CrudController {
             } catch (SQLException ignored) {}
         }
     }
+
+    public List<ColumnInfo> listColumnsInfo(String table) throws SQLException {
+        var cols = new ArrayList<ColumnInfo>();
+        var meta = conn.getMetaData();
+        try (var rs = meta.getColumns(null, null, table, "%")) {
+            while (rs.next()) {
+                var name = rs.getString("COLUMN_NAME");
+                var auto = "YES".equalsIgnoreCase(rs.getString("IS_AUTOINCREMENT"));
+                var def = rs.getString("COLUMN_DEF");
+                if (def != null && def.toLowerCase().contains("nextval(")) auto = true;
+                cols.add(new ColumnInfo(name, auto));
+            }
+        }
+        return cols;
+    }
+
+    public record ColumnInfo(String name, boolean auto) {}
 }

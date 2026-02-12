@@ -13,11 +13,11 @@ import java.util.Map;
 public class Database {
     private static final Map<String, String> ENV = loadDotEnv();
 
-    static final String DB_HOST = env("DB_HOST", "localhost");
-    static final String DB_PORT = env("DB_PORT", "5432");
-    static final String DB_NAME = env("DB_NAME", "");
-    static final String DB_USER = env("DB_USER", "");
-    static final String DB_PASSWORD = env("DB_PASSWORD", "");
+    public static final String DB_HOST = env("DB_HOST", "localhost");
+    public static final String DB_PORT = env("DB_PORT", "5432");
+    public static final String DB_NAME = env("DB_NAME", "");
+    public static final String DB_USER = env("DB_USER", "");
+    public static final String DB_PASSWORD = env("DB_PASSWORD", "");
 
     public static Connection getConnection() throws SQLException {
         if (DB_NAME.isBlank()) {
