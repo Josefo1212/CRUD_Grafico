@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import query.Queries;
 
 public class CrudController {
     private Connection conn;
@@ -46,7 +47,7 @@ public class CrudController {
 
     public List<Map<String, Object>> readTable(String table) throws SQLException {
         var list = new ArrayList<Map<String, Object>>();
-        var sql = "SELECT * FROM " + table;
+        var sql = Queries.SELECT_ALL.formatted(table);
         try (var stmt = conn.createStatement(); var rs = stmt.executeQuery(sql)) {
             var md = rs.getMetaData();
             var colCount = md.getColumnCount();
@@ -61,11 +62,31 @@ public class CrudController {
         return list;
     }
 
+    public List<Map<String, Object>> readRowByPk(String table, String pkColumn, Object pkValue) throws SQLException {
+        var list = new ArrayList<Map<String, Object>>();
+        var sql = Queries.SELECT_BY_PK.formatted(table, pkColumn);
+        try (var ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, pkValue);
+            try (var rs = ps.executeQuery()) {
+                var md = rs.getMetaData();
+                var colCount = md.getColumnCount();
+                while (rs.next()) {
+                    var row = new LinkedHashMap<String, Object>();
+                    for (var i = 1; i <= colCount; i++) {
+                        row.put(md.getColumnLabel(i), rs.getObject(i));
+                    }
+                    list.add(row);
+                }
+            }
+        }
+        return list;
+    }
+
     public void insertRow(String table, Map<String, Object> values) throws SQLException {
         if (values.isEmpty()) return;
         var cols = String.join(", ", values.keySet());
         var marks = String.join(", ", Collections.nCopies(values.size(), "?"));
-        var sql = "INSERT INTO " + table + " (" + cols + ") VALUES (" + marks + ")";
+        var sql = Queries.INSERT_TEMPLATE.formatted(table, cols, marks);
         try (var ps = conn.prepareStatement(sql)) {
             var i = 1;
             for (var v : values.values()) ps.setObject(i++, v);
@@ -80,7 +101,7 @@ public class CrudController {
             if (!sets.isEmpty()) sets.append(", ");
             sets.append(k).append(" = ?");
         }
-        var sql = "UPDATE " + table + " SET " + sets + " WHERE " + pkColumn + " = ?";
+        var sql = Queries.UPDATE_TEMPLATE.formatted(table, sets, pkColumn);
         try (var ps = conn.prepareStatement(sql)) {
             var i = 1;
             for (var v : values.values()) ps.setObject(i++, v);
@@ -90,7 +111,7 @@ public class CrudController {
     }
 
     public boolean deleteRow(String table, String pkColumn, Object pkValue) throws SQLException {
-        var sql = "DELETE FROM " + table + " WHERE " + pkColumn + " = ?";
+        var sql = Queries.DELETE_TEMPLATE.formatted(table, pkColumn);
         try (var ps = conn.prepareStatement(sql)) {
             ps.setObject(1, pkValue);
             return ps.executeUpdate() > 0;
@@ -123,3 +144,4 @@ public class CrudController {
 
     public record ColumnInfo(String name, boolean auto, String typeName) {}
 }
+

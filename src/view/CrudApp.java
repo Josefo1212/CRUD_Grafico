@@ -85,6 +85,11 @@ public class CrudApp extends Application {
                         connection.name().getText(), connection.user().getText(), connection.pass().getText());
                 statusLabel.setText(ok ? "Conexion exitosa" : "Conexion fallida");
                 tablesButton.getItems().clear();
+                stateRef.value = UiState.empty();
+                fieldsBox.getChildren().clear();
+                table.getItems().clear();
+                table.getColumns().clear();
+                tableLabel.setText("Tabla: -");
                 if (ok) {
                     for (var tableName : controller.listTables()) {
                         var item = new MenuItem(tableName);
@@ -109,7 +114,7 @@ public class CrudApp extends Application {
                 return;
             }
             switch (state.action()) {
-                case READ -> runRead(controller, state.table(), table, statusLabel);
+                case READ -> runRead(controller, state, table, statusLabel);
                 case INSERT -> runInsert(controller, state, table, statusLabel);
                 case UPDATE -> runUpdate(controller, state, table, statusLabel);
                 case DELETE -> runDelete(controller, state, table, statusLabel);
@@ -163,6 +168,9 @@ public class CrudApp extends Application {
                                   TableView<Map<String, Object>> table, VBox fieldsBox,
                                   Label statusLabel, Label tableLabel) {
         if (tableName == null || tableName.isBlank()) return state;
+        fieldsBox.getChildren().clear();
+        table.getItems().clear();
+        table.getColumns().clear();
         try {
             var columns = controller.listColumnsInfo(tableName);
             var pk = controller.getPrimaryKey(tableName);
@@ -191,7 +199,11 @@ public class CrudApp extends Application {
 
         switch (state.action()) {
             case READ -> {
-                fieldsBox.getChildren().add(new Label("Sin campos para leer"));
+                if (hasPk(state)) {
+                    addField(state, fieldsBox, state.pk());
+                } else {
+                    fieldsBox.getChildren().add(new Label("Sin campos para leer"));
+                }
                 return;
             }
             case DELETE -> {
@@ -237,10 +249,21 @@ public class CrudApp extends Application {
         fieldsBox.getChildren().add(new HBox(8, new Label(name), field));
     }
 
-    private static void runRead(CrudController controller, String tableName,
+    private static void runRead(CrudController controller, UiState state,
                                 TableView<Map<String, Object>> table, Label statusLabel) {
         try {
-            table.getItems().setAll(controller.readTable(tableName));
+            var pkValueText = getPkValue(state);
+            if (pkValueText == null) {
+                table.getItems().setAll(controller.readTable(state.table()));
+                statusLabel.setText("Datos cargados: " + table.getItems().size());
+                return;
+            }
+            var pkType = (state.pkType() == null || state.pkType().isBlank())
+                    ? getColumnType(state, state.pk())
+                    : state.pkType();
+            var pkValue = parseValue(pkValueText, pkType, statusLabel, "PK");
+            if (pkValue == null) return;
+            table.getItems().setAll(controller.readRowByPk(state.table(), state.pk(), pkValue));
             statusLabel.setText("Datos cargados: " + table.getItems().size());
         } catch (SQLException ex) {
             statusLabel.setText("Error: " + ex.getMessage());
