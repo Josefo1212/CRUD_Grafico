@@ -27,21 +27,19 @@ public class CrudController {
         return tables;
     }
 
-    public List<String> listColumns(String table) throws SQLException {
-        var cols = new ArrayList<String>();
-        var meta = conn.getMetaData();
-        try (var rs = meta.getColumns(null, null, table, "%")) {
-            while (rs.next()) {
-                cols.add(rs.getString("COLUMN_NAME"));
-            }
-        }
-        return cols;
-    }
-
     public String getPrimaryKey(String table) throws SQLException {
         var meta = conn.getMetaData();
         try (var rs = meta.getPrimaryKeys(null, null, table)) {
             if (rs.next()) return rs.getString("COLUMN_NAME");
+        }
+        return null;
+    }
+
+    public String getPrimaryKeyType(String table, String pkColumn) throws SQLException {
+        if (pkColumn == null || pkColumn.isBlank()) return null;
+        var meta = conn.getMetaData();
+        try (var rs = meta.getColumns(null, null, table, pkColumn)) {
+            if (rs.next()) return rs.getString("TYPE_NAME");
         }
         return null;
     }
@@ -63,8 +61,8 @@ public class CrudController {
         return list;
     }
 
-    public Map<String, Object> insertRow(String table, Map<String, Object> values) throws SQLException {
-        if (values.isEmpty()) return null;
+    public void insertRow(String table, Map<String, Object> values) throws SQLException {
+        if (values.isEmpty()) return;
         var cols = String.join(", ", values.keySet());
         var marks = String.join(", ", Collections.nCopies(values.size(), "?"));
         var sql = "INSERT INTO " + table + " (" + cols + ") VALUES (" + marks + ")";
@@ -73,7 +71,6 @@ public class CrudController {
             for (var v : values.values()) ps.setObject(i++, v);
             ps.executeUpdate();
         }
-        return values;
     }
 
     public boolean updateRow(String table, String pkColumn, Object pkValue, Map<String, Object> values) throws SQLException {
@@ -117,11 +114,12 @@ public class CrudController {
                 var auto = "YES".equalsIgnoreCase(rs.getString("IS_AUTOINCREMENT"));
                 var def = rs.getString("COLUMN_DEF");
                 if (def != null && def.toLowerCase().contains("nextval(")) auto = true;
-                cols.add(new ColumnInfo(name, auto));
+                var typeName = rs.getString("TYPE_NAME");
+                cols.add(new ColumnInfo(name, auto, typeName));
             }
         }
         return cols;
     }
 
-    public record ColumnInfo(String name, boolean auto) {}
+    public record ColumnInfo(String name, boolean auto, String typeName) {}
 }

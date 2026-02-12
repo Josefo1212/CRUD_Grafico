@@ -14,6 +14,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
@@ -24,10 +25,110 @@ import java.util.List;
 import java.util.Map;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
+import java.util.UUID;
 
 public class CrudApp extends Application {
+    private enum Action {
+        READ("Leer"),
+        INSERT("Insertar"),
+        UPDATE("Actualizar"),
+        DELETE("Eliminar");
+
+        final String label;
+        Action(String label) {
+            this.label = label;
+        }
+    }
+
+    private static final class UiStateRef {
+        UiState value = UiState.empty();
+    }
+
+    private record ConnectionFields(TextField host, TextField port, TextField name, TextField user,
+                                    PasswordField pass, GridPane form) {}
+
     @Override
     public void start(Stage stage) {
+        var statusLabel = new Label("Sin conexión");
+        statusLabel.setWrapText(true);
+        statusLabel.setMaxWidth(320);
+        statusLabel.setMinHeight(Region.USE_PREF_SIZE);
+
+        var connectButton = new Button("Conectar");
+        var connection = buildConnectionForm(statusLabel, connectButton);
+
+        var tablesButton = new MenuButton("Tablas");
+        var tableLabel = new Label("Tabla: -");
+
+        var readButton = new Button("Leer");
+        var createButton = new Button("Insertar");
+        var updateButton = new Button("Actualizar");
+        var deleteButton = new Button("Eliminar");
+        var runButton = new Button("Hacer CRUD");
+        var actionLabel = new Label("Accion: " + Action.READ.label);
+
+        var actionBar = new HBox(8, readButton, createButton, updateButton, deleteButton, runButton, actionLabel);
+        actionBar.setAlignment(Pos.CENTER_LEFT);
+
+        var fieldsBox = new VBox(6);
+
+        var table = new TableView<Map<String, Object>>();
+
+        var controller = new CrudController();
+        var stateRef = new UiStateRef();
+
+        connectButton.setOnAction(_ -> {
+            try {
+                var host = connection.host().getText().isBlank() ? "localhost" : connection.host().getText();
+                var port = connection.port().getText().isBlank() ? "5432" : connection.port().getText();
+                boolean ok = controller.connect(host, port,
+                        connection.name().getText(), connection.user().getText(), connection.pass().getText());
+                statusLabel.setText(ok ? "Conexion exitosa" : "Conexion fallida");
+                tablesButton.getItems().clear();
+                if (ok) {
+                    for (var tableName : controller.listTables()) {
+                        var item = new MenuItem(tableName);
+                        item.setOnAction(_ -> stateRef.value = loadTable(controller, stateRef.value, tableName, table, fieldsBox, statusLabel, tableLabel));
+                        tablesButton.getItems().add(item);
+                    }
+                }
+            } catch (Exception ex) {
+                statusLabel.setText("Error: " + ex.getMessage());
+            }
+        });
+
+        readButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.READ));
+        createButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.INSERT));
+        updateButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.UPDATE));
+        deleteButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.DELETE));
+
+        runButton.setOnAction(_ -> {
+            var state = stateRef.value;
+            if (state.table() == null || state.table().isBlank()) {
+                statusLabel.setText("Seleccione una tabla");
+                return;
+            }
+            switch (state.action()) {
+                case READ -> runRead(controller, state.table(), table, statusLabel);
+                case INSERT -> runInsert(controller, state, table, statusLabel);
+                case UPDATE -> runUpdate(controller, state, table, statusLabel);
+                case DELETE -> runDelete(controller, state, table, statusLabel);
+            }
+        });
+
+        var tablesBar = new HBox(8, tablesButton, tableLabel);
+        tablesBar.setAlignment(Pos.CENTER_LEFT);
+
+        var root = new VBox(12, connection.form(), tablesBar, actionBar, fieldsBox, table);
+        root.setPadding(new Insets(12));
+
+        var scene = new Scene(root, 900, 560);
+        stage.setTitle("CRUD Grafico");
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    private static ConnectionFields buildConnectionForm(Label statusLabel, Button connectButton) {
         var hostField = new TextField();
         hostField.setPromptText("localhost");
         hostField.setText(Database.DB_HOST);
@@ -48,9 +149,6 @@ public class CrudApp extends Application {
         passField.setPromptText("contrasena");
         passField.setText(Database.DB_PASSWORD);
 
-        var connectButton = new Button("Conectar");
-        var statusLabel = new Label("Sin conexion");
-
         var form = new GridPane();
         form.setHgap(10);
         form.setVgap(8);
@@ -58,113 +156,20 @@ public class CrudApp extends Application {
         form.addRow(1, new Label("Base"), nameField, new Label("Usuario"), userField);
         form.addRow(2, new Label("Clave"), passField, connectButton, statusLabel);
 
-        var tablesButton = new MenuButton("Tablas");
-        var tableLabel = new Label("Tabla: -");
-
-        var readButton = new Button("Leer");
-        var createButton = new Button("Insertar");
-        var updateButton = new Button("Actualizar");
-        var deleteButton = new Button("Eliminar");
-        var runButton = new Button("Hacer CRUD");
-        var actionLabel = new Label("Accion: Leer");
-
-        var actionBar = new HBox(8, readButton, createButton, updateButton, deleteButton, runButton, actionLabel);
-        actionBar.setAlignment(Pos.CENTER_LEFT);
-
-        var fieldsBox = new VBox(6);
-
-        var table = new TableView<Map<String, Object>>();
-
-        var controller = new CrudController();
-        var state = new UiState();
-
-        connectButton.setOnAction(_ -> {
-            try {
-                boolean ok = controller.connect(hostField.getText().isBlank() ? "localhost" : hostField.getText(),
-                        portField.getText().isBlank() ? "5432" : portField.getText(),
-                        nameField.getText(), userField.getText(), passField.getText());
-                statusLabel.setText(ok ? "Conexion exitosa" : "Conexion fallida");
-                tablesButton.getItems().clear();
-                if (ok) {
-                    for (var tableName : controller.listTables()) {
-                        var item = new MenuItem(tableName);
-                        item.setOnAction(__ -> loadTable(controller, state, tableName, table, fieldsBox, statusLabel, tableLabel));
-                        tablesButton.getItems().add(item);
-                    }
-                }
-            } catch (Exception ex) {
-                statusLabel.setText("Error: " + ex.getMessage());
-            }
-        });
-
-        readButton.setOnAction(_ -> {
-            state.action = "Leer";
-            actionLabel.setText("Accion: Leer");
-            buildFields(state, fieldsBox);
-        });
-
-        createButton.setOnAction(_ -> {
-            state.action = "Insertar";
-            actionLabel.setText("Accion: Insertar");
-            buildFields(state, fieldsBox);
-        });
-
-        updateButton.setOnAction(_ -> {
-            state.action = "Actualizar";
-            actionLabel.setText("Accion: Actualizar");
-            buildFields(state, fieldsBox);
-        });
-
-        deleteButton.setOnAction(_ -> {
-            state.action = "Eliminar";
-            actionLabel.setText("Accion: Eliminar");
-            buildFields(state, fieldsBox);
-        });
-
-        runButton.setOnAction(_ -> {
-            if (state.table == null || state.table.isBlank()) {
-                statusLabel.setText("Seleccione una tabla");
-                return;
-            }
-            if ("Leer".equals(state.action)) {
-                runRead(controller, state.table, table, statusLabel);
-                return;
-            }
-            if ("Insertar".equals(state.action)) {
-                runInsert(controller, state, table, statusLabel);
-                return;
-            }
-            if ("Actualizar".equals(state.action)) {
-                runUpdate(controller, state, table, statusLabel);
-                return;
-            }
-            if ("Eliminar".equals(state.action)) {
-                runDelete(controller, state, table, statusLabel);
-            }
-        });
-
-        var tablesBar = new HBox(8, tablesButton, tableLabel);
-        tablesBar.setAlignment(Pos.CENTER_LEFT);
-
-        var root = new VBox(12, form, tablesBar, actionBar, fieldsBox, table);
-        root.setPadding(new Insets(12));
-
-        var scene = new Scene(root, 900, 560);
-        stage.setTitle("CRUD Grafico");
-        stage.setScene(scene);
-        stage.show();
+        return new ConnectionFields(hostField, portField, nameField, userField, passField, form);
     }
 
-    private static void loadTable(CrudController controller, UiState state, String tableName,
+    private static UiState loadTable(CrudController controller, UiState state, String tableName,
                                   TableView<Map<String, Object>> table, VBox fieldsBox,
                                   Label statusLabel, Label tableLabel) {
-        if (tableName == null || tableName.isBlank()) return;
+        if (tableName == null || tableName.isBlank()) return state;
         try {
-            state.table = tableName;
-            state.columns = controller.listColumnsInfo(tableName);
-            state.pk = controller.getPrimaryKey(tableName);
+            var columns = controller.listColumnsInfo(tableName);
+            var pk = controller.getPrimaryKey(tableName);
+            var pkType = controller.getPrimaryKeyType(tableName, pk);
+            var updated = state.withLoadedTable(tableName, columns, pk, pkType, isPkAuto(pk, columns));
             table.getColumns().clear();
-            for (var col : state.columns) {
+            for (var col : updated.columns()) {
                 var c = new TableColumn<Map<String, Object>, Object>(col.name());
                 c.setCellValueFactory(data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().get(col.name())));
                 table.getColumns().add(c);
@@ -172,48 +177,63 @@ public class CrudApp extends Application {
             table.getItems().setAll(controller.readTable(tableName));
             tableLabel.setText("Tabla: " + tableName);
             statusLabel.setText("Tabla cargada: " + tableName);
-            buildFields(state, fieldsBox);
+            buildFields(updated, fieldsBox);
+            return updated;
         } catch (SQLException ex) {
             statusLabel.setText("Error: " + ex.getMessage());
+            return state;
         }
     }
 
     private static void buildFields(UiState state, VBox fieldsBox) {
         fieldsBox.getChildren().clear();
-        state.fields.clear();
+        state.fields().clear();
 
-        if ("Leer".equals(state.action)) {
-            fieldsBox.getChildren().add(new Label("Sin campos para leer"));
-            return;
-        }
-
-        if ("Eliminar".equals(state.action)) {
-            if (state.pk != null && !state.pk.isBlank()) {
-                addField(state, fieldsBox, state.pk);
-            } else {
-                fieldsBox.getChildren().add(new Label("No se encontro PK"));
+        switch (state.action()) {
+            case READ -> {
+                fieldsBox.getChildren().add(new Label("Sin campos para leer"));
+                return;
             }
-            return;
-        }
-
-        if ("Actualizar".equals(state.action)) {
-            if (state.pk != null && !state.pk.isBlank()) {
-                addField(state, fieldsBox, state.pk);
+            case DELETE -> {
+                if (hasPk(state)) {
+                    addField(state, fieldsBox, state.pk());
+                } else {
+                    fieldsBox.getChildren().add(new Label("No se encontro PK"));
+                }
+                return;
+            }
+            case UPDATE -> {
+                if (hasPk(state)) {
+                    addField(state, fieldsBox, state.pk());
+                }
+            }
+            case INSERT -> {
             }
         }
 
-        for (var col : state.columns) {
-            if (state.pk != null && !state.pk.isBlank() && col.name().equals(state.pk)) continue;
-            if ("Insertar".equals(state.action) && col.auto()) continue;
-            if ("Actualizar".equals(state.action) && col.auto()) continue;
+        var includePkInInsert = state.action() == Action.INSERT && !state.pkAuto();
+        for (var col : state.columns()) {
+            var isPk = hasPk(state) && col.name().equals(state.pk());
+            if (isPk && includePkInInsert) {
+                addField(state, fieldsBox, col.name());
+                continue;
+            }
+            if (isPk || col.auto()) continue;
             addField(state, fieldsBox, col.name());
         }
+    }
+
+    private static UiState setAction(UiState state, VBox fieldsBox, Label actionLabel, Action action) {
+        var updated = state.withAction(action);
+        actionLabel.setText("Accion: " + action.label);
+        buildFields(updated, fieldsBox);
+        return updated;
     }
 
     private static void addField(UiState state, VBox fieldsBox, String name) {
         var field = new TextField();
         field.setPromptText(name);
-        state.fields.put(name, field);
+        state.fields().put(name, field);
         fieldsBox.getChildren().add(new HBox(8, new Label(name), field));
     }
 
@@ -229,15 +249,15 @@ public class CrudApp extends Application {
 
     private static void runInsert(CrudController controller, UiState state,
                                   TableView<Map<String, Object>> table, Label statusLabel) {
-        var values = collectValues(state, false);
-        if (values.isEmpty()) {
+        var values = collectValues(state, !state.pkAuto, statusLabel);
+        if (values == null || values.isEmpty()) {
+            if (values == null) return;
             statusLabel.setText("Ingrese valores para insertar");
             return;
         }
         try {
             controller.insertRow(state.table, values);
-            table.getItems().setAll(controller.readTable(state.table));
-            statusLabel.setText("Insertado");
+            refreshTable(controller, state, table, statusLabel, "Insertado");
         } catch (SQLException ex) {
             statusLabel.setText("Error: " + ex.getMessage());
         }
@@ -245,20 +265,17 @@ public class CrudApp extends Application {
 
     private static void runUpdate(CrudController controller, UiState state,
                                   TableView<Map<String, Object>> table, Label statusLabel) {
-        var pkValue = getPkValue(state);
-        if (pkValue == null) {
-            statusLabel.setText("Ingrese valor de PK");
-            return;
-        }
-        var values = collectValues(state, false);
-        if (values.isEmpty()) {
+        var pkValue = parsePkOrWarn(state, statusLabel);
+        if (pkValue == null) return;
+        var values = collectValues(state, false, statusLabel);
+        if (values == null || values.isEmpty()) {
+            if (values == null) return;
             statusLabel.setText("Ingrese valores para actualizar");
             return;
         }
         try {
             if (controller.updateRow(state.table, state.pk, pkValue, values)) {
-                table.getItems().setAll(controller.readTable(state.table));
-                statusLabel.setText("Actualizado");
+                refreshTable(controller, state, table, statusLabel, "Actualizado");
             } else {
                 statusLabel.setText("No actualizado");
             }
@@ -269,15 +286,11 @@ public class CrudApp extends Application {
 
     private static void runDelete(CrudController controller, UiState state,
                                   TableView<Map<String, Object>> table, Label statusLabel) {
-        var pkValue = getPkValue(state);
-        if (pkValue == null) {
-            statusLabel.setText("Ingrese valor de PK");
-            return;
-        }
+        var pkValue = parsePkOrWarn(state, statusLabel);
+        if (pkValue == null) return;
         try {
             if (controller.deleteRow(state.table, state.pk, pkValue)) {
-                table.getItems().setAll(controller.readTable(state.table));
-                statusLabel.setText("Eliminado");
+                refreshTable(controller, state, table, statusLabel, "Eliminado");
             } else {
                 statusLabel.setText("No eliminado");
             }
@@ -286,32 +299,95 @@ public class CrudApp extends Application {
         }
     }
 
+    private static void refreshTable(CrudController controller, UiState state,
+                                     TableView<Map<String, Object>> table, Label statusLabel,
+                                     String successMessage) throws SQLException {
+        table.getItems().setAll(controller.readTable(state.table));
+        statusLabel.setText(successMessage);
+    }
+
+    private static Object parsePkOrWarn(UiState state, Label statusLabel) {
+        var pkValueText = getPkValue(state);
+        if (pkValueText == null) {
+            statusLabel.setText("Ingrese valor de PK");
+            return null;
+        }
+        var pkType = (state.pkType() == null || state.pkType().isBlank())
+                ? getColumnType(state, state.pk())
+                : state.pkType();
+        return parseValue(pkValueText, pkType, statusLabel, "PK");
+    }
+
     private static String getPkValue(UiState state) {
-        if (state.pk == null || state.pk.isBlank()) return null;
-        var field = state.fields.get(state.pk);
+        if (!hasPk(state)) return null;
+        var field = state.fields().get(state.pk());
         if (field == null) return null;
         var value = field.getText();
         if (value == null || value.isBlank()) return null;
         return value;
     }
 
-    private static Map<String, Object> collectValues(UiState state, boolean includePk) {
+    private static Map<String, Object> collectValues(UiState state, boolean includePk, Label statusLabel) {
         var map = new LinkedHashMap<String, Object>();
-        for (var entry : state.fields.entrySet()) {
+        for (var entry : state.fields().entrySet()) {
             var key = entry.getKey();
-            if (!includePk && key.equals(state.pk)) continue;
-            var value = entry.getValue().getText();
-            if (value == null || value.isBlank()) continue;
+            if (!includePk && key.equals(state.pk())) continue;
+            var valueText = entry.getValue().getText();
+            if (valueText == null || valueText.isBlank()) continue;
+            var typeName = getColumnType(state, key);
+            var value = parseValue(valueText, typeName, statusLabel, key);
+            if (value == null) return null;
             map.put(key, value);
         }
         return map;
     }
 
-    private static class UiState {
-        String action = "Leer";
-        String table;
-        String pk;
-        List<CrudController.ColumnInfo> columns = new ArrayList<>();
-        Map<String, TextField> fields = new LinkedHashMap<>();
+    private static String getColumnType(UiState state, String columnName) {
+        for (var col : state.columns()) {
+            if (col.name().equals(columnName)) return col.typeName();
+        }
+        return null;
+    }
+
+    private static Object parseValue(String value, String typeName, Label statusLabel, String columnName) {
+        if (typeName == null || typeName.isBlank()) return value;
+        var t = typeName.toUpperCase();
+        try {
+            if (t.contains("INT") || t.contains("SERIAL")) return Long.parseLong(value);
+            if (t.contains("UUID")) return UUID.fromString(value);
+            if (t.contains("BOOL")) return Boolean.parseBoolean(value);
+        } catch (Exception ex) {
+            statusLabel.setText("Valor invalido para " + columnName + " (" + typeName + ")");
+            return null;
+        }
+        return value;
+    }
+
+    private static boolean hasPk(UiState state) {
+        return state.pk() != null && !state.pk().isBlank();
+    }
+
+    private static boolean isPkAuto(String pk, List<CrudController.ColumnInfo> columns) {
+        if (pk == null || pk.isBlank()) return false;
+        for (var col : columns) {
+            if (pk.equals(col.name())) return col.auto();
+        }
+        return false;
+    }
+
+    private record UiState(Action action, String table, String pk, String pkType, boolean pkAuto,
+                           List<CrudController.ColumnInfo> columns, Map<String, TextField> fields) {
+        static UiState empty() {
+            return new UiState(Action.READ, null, null, null, false, new ArrayList<>(), new LinkedHashMap<>());
+        }
+
+        UiState withAction(Action action) {
+            return new UiState(action, table, pk, pkType, pkAuto, columns, fields);
+        }
+
+        UiState withLoadedTable(String table, List<CrudController.ColumnInfo> columns, String pk,
+                                String pkType, boolean pkAuto) {
+            return new UiState(action, table, pk, pkType, pkAuto, columns, fields);
+        }
     }
 }

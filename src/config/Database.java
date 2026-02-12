@@ -51,7 +51,7 @@ public class Database {
                 throw new IllegalStateException("No se pudo leer el archivo .env", e);
             }
         }
-        return map;
+        return Map.copyOf(map);
     }
 
     private static String env(String key, String fallback) {
