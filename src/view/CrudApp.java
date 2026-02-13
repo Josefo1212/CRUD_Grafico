@@ -356,7 +356,10 @@ public class CrudApp extends Application {
             var key = entry.getKey();
             if (!includePk && key.equals(state.pk())) continue;
             var valueText = entry.getValue().getText();
-            if (valueText == null || valueText.isBlank()) continue;
+            if (valueText == null || valueText.isBlank()) {
+                map.put(key, null);
+                continue;
+            }
             var typeName = getColumnType(state, key);
             var value = parseValue(valueText, typeName, statusLabel, key);
             if (value == null) return null;

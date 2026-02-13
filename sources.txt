@@ -1,0 +1,5 @@
+C:\Users\jfcas\OneDrive\Desktop\Java(P.Visual)\CRUD_Grafico\src\Main.java
+C:\Users\jfcas\OneDrive\Desktop\Java(P.Visual)\CRUD_Grafico\src\config\Database.java
+C:\Users\jfcas\OneDrive\Desktop\Java(P.Visual)\CRUD_Grafico\src\controller\CrudController.java
+C:\Users\jfcas\OneDrive\Desktop\Java(P.Visual)\CRUD_Grafico\src\query\Queries.java
+C:\Users\jfcas\OneDrive\Desktop\Java(P.Visual)\CRUD_Grafico\src\view\CrudApp.java
