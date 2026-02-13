@@ -51,19 +51,31 @@ public class CrudApp extends Application {
     private record ConnectionFields(TextField host, TextField port, TextField name, TextField user,
                                     PasswordField pass, GridPane form) {}
 
+    private static final String BG = "-fx-background-color: #eef1f6;";
+    private static final String CARD = "-fx-background-color: #ffffff; -fx-border-color: #d6dbe6; -fx-border-radius: 14; -fx-background-radius: 14; -fx-padding: 14; -fx-effect: dropshadow(gaussian, rgba(31,122,236,0.08), 12, 0.2, 0, 2);";
+    private static final String TITLE = "-fx-font-weight: 700; -fx-text-fill: #1c2b4a; -fx-font-size: 13px;";
+    private static final String LABEL = "-fx-text-fill: #1c2b4a;";
+    private static final String BTN_PRIMARY = "-fx-background-color: #1f7aec; -fx-text-fill: white; -fx-background-radius: 10; -fx-padding: 6 14;";
+    private static final String BTN_GHOST = "-fx-background-color: #ffffff; -fx-text-fill: #1c2b4a; -fx-background-radius: 10; -fx-border-color: #d6dbe6; -fx-border-radius: 10;";
+    private static final String FIELD = "-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #d6dbe6;";
+    private static final String TABLE_STYLE = "-fx-background-color: #ffffff; -fx-border-color: #d6dbe6; -fx-border-radius: 12; -fx-background-radius: 12;";
+
     @Override
     public void start(Stage stage) {
         var statusLabel = new Label("Sin conexión");
         statusLabel.setWrapText(true);
-        statusLabel.setMaxWidth(360);
+        statusLabel.setMaxWidth(420);
         statusLabel.setMinHeight(Region.USE_PREF_SIZE);
-        statusLabel.setStyle("-fx-text-fill: #1f2a44;");
+        statusLabel.setStyle("-fx-text-fill: #1c2b4a; -fx-font-size: 12px;");
 
         var connectButton = new Button("Conectar");
+        connectButton.setStyle(BTN_PRIMARY);
         var connection = buildConnectionForm(statusLabel, connectButton);
 
         var tablesButton = new MenuButton("Tablas");
+        tablesButton.setStyle(BTN_GHOST);
         var tableLabel = new Label("Tabla: -");
+        tableLabel.setStyle("-fx-text-fill: #1c2b4a; -fx-font-weight: 600;");
 
         var readButton = new Button("Leer");
         var createButton = new Button("Insertar");
@@ -71,6 +83,7 @@ public class CrudApp extends Application {
         var deleteButton = new Button("Eliminar");
         var runButton = new Button("Hacer CRUD");
         var actionLabel = new Label("Accion: " + Action.READ.label);
+        actionLabel.setStyle("-fx-text-fill: #1c2b4a; -fx-font-weight: 600;");
 
         var readModeGroup = new ToggleGroup();
         var readAllRadio = new RadioButton("Leer todo");
@@ -79,21 +92,21 @@ public class CrudApp extends Application {
         readByPkRadio.setToggleGroup(readModeGroup);
         readAllRadio.setSelected(true);
 
-        var actionBar = new HBox(8, readButton, createButton, updateButton, deleteButton, runButton, actionLabel);
+        var actionBar = new HBox(8, readButton, createButton, updateButton, deleteButton, new Separator(), runButton, actionLabel);
         actionBar.setAlignment(Pos.CENTER_LEFT);
 
-        runButton.setStyle("-fx-background-color: #1f7aec; -fx-text-fill: white;");
-        readButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
-        createButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
-        updateButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
-        deleteButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
+        runButton.setStyle(BTN_PRIMARY);
+        readButton.setStyle(BTN_GHOST);
+        createButton.setStyle(BTN_GHOST);
+        updateButton.setStyle(BTN_GHOST);
+        deleteButton.setStyle(BTN_GHOST);
 
-        var fieldsBox = new VBox(6);
-        fieldsBox.setPadding(new Insets(4, 0, 4, 0));
+        var fieldsBox = new VBox(8);
+        fieldsBox.setPadding(new Insets(6, 0, 6, 0));
 
         var table = new TableView<Map<String, Object>>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        table.setStyle("-fx-background-color: #f7f8fb; -fx-border-color: #c4cada; -fx-border-radius: 6; -fx-background-radius: 6;");
+        table.setStyle(TABLE_STYLE);
 
         var controller = new CrudController();
         var stateRef = new UiStateRef();
@@ -149,16 +162,16 @@ public class CrudApp extends Application {
         });
 
         var connectionTitle = new Label("Conexion");
-        connectionTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
-        var connectionBox = new VBox(6, connectionTitle, connection.form());
-        connectionBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+        connectionTitle.setStyle(TITLE);
+        var connectionBox = new VBox(8, connectionTitle, connection.form());
+        connectionBox.setStyle(CARD);
 
         var tableTitle = new Label("Tabla");
-        tableTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
+        tableTitle.setStyle(TITLE);
         var tablesBar = new HBox(8, tablesButton, tableLabel);
         tablesBar.setAlignment(Pos.CENTER_LEFT);
-        var tableBox = new VBox(6, tableTitle, tablesBar);
-        tableBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+        var tableBox = new VBox(8, tableTitle, tablesBar);
+        tableBox.setStyle(CARD);
 
         var topRow = new HBox(12, connectionBox, tableBox);
         topRow.setAlignment(Pos.TOP_LEFT);
@@ -166,24 +179,34 @@ public class CrudApp extends Application {
         HBox.setHgrow(tableBox, Priority.NEVER);
 
         var actionTitle = new Label("Acciones");
-        actionTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
-        var actionBox = new VBox(6, actionTitle, actionBar);
-        actionBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+        actionTitle.setStyle(TITLE);
+        var actionBox = new VBox(8, actionTitle, actionBar);
+        actionBox.setStyle(CARD);
 
         var fieldsTitle = new Label("Campos");
-        fieldsTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
-        var fieldsSection = new VBox(6, fieldsTitle, fieldsBox);
-        fieldsSection.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+        fieldsTitle.setStyle(TITLE);
+        var fieldsSection = new VBox(8, fieldsTitle, fieldsBox);
+        fieldsSection.setStyle(CARD);
+        fieldsSection.setMinWidth(320);
 
-        var root = new VBox(10, topRow, actionBox, fieldsSection, table);
-        root.setPadding(new Insets(10));
-        root.setStyle("-fx-background-color: #e2e6ef;");
+        var dataTitle = new Label("Datos");
+        dataTitle.setStyle(TITLE);
+        var tableSection = new VBox(8, dataTitle, table);
+        tableSection.setStyle(CARD);
 
-        VBox.setVgrow(table, Priority.ALWAYS);
-        table.setMinHeight(240);
+        var bottomRow = new HBox(12, fieldsSection, tableSection);
+        HBox.setHgrow(tableSection, Priority.ALWAYS);
+
+        var root = new VBox(12, topRow, actionBox, bottomRow);
+        root.setPadding(new Insets(14));
+        root.setStyle(BG);
+
+        VBox.setVgrow(bottomRow, Priority.ALWAYS);
+        VBox.setVgrow(tableSection, Priority.ALWAYS);
+        table.setMinHeight(320);
         table.setPrefHeight(Region.USE_COMPUTED_SIZE);
 
-        var scene = new Scene(root, 900, 560);
+        var scene = new Scene(root, 1020, 680);
         stage.setTitle("CRUD Grafico");
         stage.setScene(scene);
         stage.show();
@@ -193,22 +216,27 @@ public class CrudApp extends Application {
         var hostField = new TextField();
         hostField.setPromptText("localhost");
         hostField.setText(Database.DB_HOST);
+        hostField.setStyle(FIELD);
 
         var portField = new TextField();
         portField.setPromptText("5432");
         portField.setText(Database.DB_PORT);
+        portField.setStyle(FIELD);
 
         var nameField = new TextField();
         nameField.setPromptText("nombre_db");
         nameField.setText(Database.DB_NAME);
+        nameField.setStyle(FIELD);
 
         var userField = new TextField();
         userField.setPromptText("usuario");
         userField.setText(Database.DB_USER);
+        userField.setStyle(FIELD);
 
         var passField = new PasswordField();
         passField.setPromptText("contrasena");
         passField.setText(Database.DB_PASSWORD);
+        passField.setStyle(FIELD);
 
         var form = new GridPane();
         form.setHgap(10);
@@ -216,6 +244,10 @@ public class CrudApp extends Application {
         form.addRow(0, new Label("Host"), hostField, new Label("Puerto"), portField);
         form.addRow(1, new Label("Base"), nameField, new Label("Usuario"), userField);
         form.addRow(2, new Label("Clave"), passField, connectButton, statusLabel);
+
+        for (var node : form.getChildren()) {
+            if (node instanceof Label label) label.setStyle(LABEL);
+        }
 
         return new ConnectionFields(hostField, portField, nameField, userField, passField, form);
     }
@@ -317,8 +349,10 @@ public class CrudApp extends Application {
         var field = new TextField();
         field.setPromptText(name);
         field.setPrefWidth(240);
+        field.setStyle(FIELD);
         var label = new Label(name);
         label.setMinWidth(140);
+        label.setStyle(LABEL);
         var row = new HBox(8, label, field);
         row.setAlignment(Pos.CENTER_LEFT);
         state.fields().put(name, field);
