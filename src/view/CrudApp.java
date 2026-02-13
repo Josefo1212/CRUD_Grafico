@@ -9,11 +9,15 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.Separator;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -51,8 +55,9 @@ public class CrudApp extends Application {
     public void start(Stage stage) {
         var statusLabel = new Label("Sin conexión");
         statusLabel.setWrapText(true);
-        statusLabel.setMaxWidth(320);
+        statusLabel.setMaxWidth(360);
         statusLabel.setMinHeight(Region.USE_PREF_SIZE);
+        statusLabel.setStyle("-fx-text-fill: #1f2a44;");
 
         var connectButton = new Button("Conectar");
         var connection = buildConnectionForm(statusLabel, connectButton);
@@ -67,12 +72,28 @@ public class CrudApp extends Application {
         var runButton = new Button("Hacer CRUD");
         var actionLabel = new Label("Accion: " + Action.READ.label);
 
+        var readModeGroup = new ToggleGroup();
+        var readAllRadio = new RadioButton("Leer todo");
+        readAllRadio.setToggleGroup(readModeGroup);
+        var readByPkRadio = new RadioButton("Leer por PK");
+        readByPkRadio.setToggleGroup(readModeGroup);
+        readAllRadio.setSelected(true);
+
         var actionBar = new HBox(8, readButton, createButton, updateButton, deleteButton, runButton, actionLabel);
         actionBar.setAlignment(Pos.CENTER_LEFT);
 
+        runButton.setStyle("-fx-background-color: #1f7aec; -fx-text-fill: white;");
+        readButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
+        createButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
+        updateButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
+        deleteButton.setStyle("-fx-background-color: #e6e9ef; -fx-text-fill: #1f2a44;");
+
         var fieldsBox = new VBox(6);
+        fieldsBox.setPadding(new Insets(4, 0, 4, 0));
 
         var table = new TableView<Map<String, Object>>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setStyle("-fx-background-color: #f7f8fb; -fx-border-color: #c4cada; -fx-border-radius: 6; -fx-background-radius: 6;");
 
         var controller = new CrudController();
         var stateRef = new UiStateRef();
@@ -93,7 +114,7 @@ public class CrudApp extends Application {
                 if (ok) {
                     for (var tableName : controller.listTables()) {
                         var item = new MenuItem(tableName);
-                        item.setOnAction(_ -> stateRef.value = loadTable(controller, stateRef.value, tableName, table, fieldsBox, statusLabel, tableLabel));
+                        item.setOnAction(_ -> stateRef.value = loadTable(controller, stateRef.value, tableName, table, fieldsBox, statusLabel, tableLabel, readAllRadio, readByPkRadio));
                         tablesButton.getItems().add(item);
                     }
                 }
@@ -102,10 +123,10 @@ public class CrudApp extends Application {
             }
         });
 
-        readButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.READ));
-        createButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.INSERT));
-        updateButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.UPDATE));
-        deleteButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.DELETE));
+        readButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.READ, controller, table, statusLabel, readAllRadio, readByPkRadio));
+        createButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.INSERT, controller, table, statusLabel, readAllRadio, readByPkRadio));
+        updateButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.UPDATE, controller, table, statusLabel, readAllRadio, readByPkRadio));
+        deleteButton.setOnAction(_ -> stateRef.value = setAction(stateRef.value, fieldsBox, actionLabel, Action.DELETE, controller, table, statusLabel, readAllRadio, readByPkRadio));
 
         runButton.setOnAction(_ -> {
             var state = stateRef.value;
@@ -114,18 +135,53 @@ public class CrudApp extends Application {
                 return;
             }
             switch (state.action()) {
-                case READ -> runRead(controller, state, table, statusLabel);
+                case READ -> {
+                    if (readAllRadio.isSelected()) {
+                        runReadAll(controller, state, table, statusLabel);
+                    } else {
+                        runReadByPk(controller, state, table, statusLabel);
+                    }
+                }
                 case INSERT -> runInsert(controller, state, table, statusLabel);
                 case UPDATE -> runUpdate(controller, state, table, statusLabel);
                 case DELETE -> runDelete(controller, state, table, statusLabel);
             }
         });
 
+        var connectionTitle = new Label("Conexion");
+        connectionTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
+        var connectionBox = new VBox(6, connectionTitle, connection.form());
+        connectionBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+
+        var tableTitle = new Label("Tabla");
+        tableTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
         var tablesBar = new HBox(8, tablesButton, tableLabel);
         tablesBar.setAlignment(Pos.CENTER_LEFT);
+        var tableBox = new VBox(6, tableTitle, tablesBar);
+        tableBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
 
-        var root = new VBox(12, connection.form(), tablesBar, actionBar, fieldsBox, table);
-        root.setPadding(new Insets(12));
+        var topRow = new HBox(12, connectionBox, tableBox);
+        topRow.setAlignment(Pos.TOP_LEFT);
+        HBox.setHgrow(connectionBox, Priority.ALWAYS);
+        HBox.setHgrow(tableBox, Priority.NEVER);
+
+        var actionTitle = new Label("Acciones");
+        actionTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
+        var actionBox = new VBox(6, actionTitle, actionBar);
+        actionBox.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+
+        var fieldsTitle = new Label("Campos");
+        fieldsTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1f2a44;");
+        var fieldsSection = new VBox(6, fieldsTitle, fieldsBox);
+        fieldsSection.setStyle("-fx-background-color: #f1f3f7; -fx-border-color: #1f7aec; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8;");
+
+        var root = new VBox(10, topRow, actionBox, fieldsSection, table);
+        root.setPadding(new Insets(10));
+        root.setStyle("-fx-background-color: #e2e6ef;");
+
+        VBox.setVgrow(table, Priority.ALWAYS);
+        table.setMinHeight(240);
+        table.setPrefHeight(Region.USE_COMPUTED_SIZE);
 
         var scene = new Scene(root, 900, 560);
         stage.setTitle("CRUD Grafico");
@@ -166,7 +222,8 @@ public class CrudApp extends Application {
 
     private static UiState loadTable(CrudController controller, UiState state, String tableName,
                                   TableView<Map<String, Object>> table, VBox fieldsBox,
-                                  Label statusLabel, Label tableLabel) {
+                                  Label statusLabel, Label tableLabel,
+                                  RadioButton readAllRadio, RadioButton readByPkRadio) {
         if (tableName == null || tableName.isBlank()) return state;
         fieldsBox.getChildren().clear();
         table.getItems().clear();
@@ -177,15 +234,17 @@ public class CrudApp extends Application {
             var pkType = controller.getPrimaryKeyType(tableName, pk);
             var updated = state.withLoadedTable(tableName, columns, pk, pkType, isPkAuto(pk, columns));
             table.getColumns().clear();
+            var colCount = Math.max(1, updated.columns().size());
             for (var col : updated.columns()) {
                 var c = new TableColumn<Map<String, Object>, Object>(col.name());
                 c.setCellValueFactory(data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().get(col.name())));
+                c.setMinWidth(120);
+                c.prefWidthProperty().bind(table.widthProperty().subtract(18).divide(colCount));
                 table.getColumns().add(c);
             }
-            table.getItems().setAll(controller.readTable(tableName));
             tableLabel.setText("Tabla: " + tableName);
-            statusLabel.setText("Tabla cargada: " + tableName);
-            buildFields(updated, fieldsBox);
+            statusLabel.setText("Tabla seleccionada: " + tableName);
+            buildFields(updated, fieldsBox, controller, table, statusLabel, readAllRadio, readByPkRadio);
             return updated;
         } catch (SQLException ex) {
             statusLabel.setText("Error: " + ex.getMessage());
@@ -193,14 +252,24 @@ public class CrudApp extends Application {
         }
     }
 
-    private static void buildFields(UiState state, VBox fieldsBox) {
+    private static void buildFields(UiState state, VBox fieldsBox, CrudController controller,
+                                    TableView<Map<String, Object>> table, Label statusLabel,
+                                    RadioButton readAllRadio, RadioButton readByPkRadio) {
         fieldsBox.getChildren().clear();
         state.fields().clear();
 
         switch (state.action()) {
             case READ -> {
+                var modeRow = new HBox(12, readAllRadio, readByPkRadio);
+                modeRow.setAlignment(Pos.CENTER_LEFT);
+                modeRow.setStyle("-fx-padding: 4 0 4 0;");
+                fieldsBox.getChildren().add(modeRow);
                 if (hasPk(state)) {
                     addField(state, fieldsBox, state.pk());
+                    var pkField = state.fields().get(state.pk());
+                    if (pkField != null) {
+                        pkField.disableProperty().bind(readAllRadio.selectedProperty());
+                    }
                 } else {
                     fieldsBox.getChildren().add(new Label("Sin campos para leer"));
                 }
@@ -235,27 +304,43 @@ public class CrudApp extends Application {
         }
     }
 
-    private static UiState setAction(UiState state, VBox fieldsBox, Label actionLabel, Action action) {
+    private static UiState setAction(UiState state, VBox fieldsBox, Label actionLabel, Action action,
+                                     CrudController controller, TableView<Map<String, Object>> table,
+                                     Label statusLabel, RadioButton readAllRadio, RadioButton readByPkRadio) {
         var updated = state.withAction(action);
         actionLabel.setText("Accion: " + action.label);
-        buildFields(updated, fieldsBox);
+        buildFields(updated, fieldsBox, controller, table, statusLabel, readAllRadio, readByPkRadio);
         return updated;
     }
 
     private static void addField(UiState state, VBox fieldsBox, String name) {
         var field = new TextField();
         field.setPromptText(name);
+        field.setPrefWidth(240);
+        var label = new Label(name);
+        label.setMinWidth(140);
+        var row = new HBox(8, label, field);
+        row.setAlignment(Pos.CENTER_LEFT);
         state.fields().put(name, field);
-        fieldsBox.getChildren().add(new HBox(8, new Label(name), field));
+        fieldsBox.getChildren().add(row);
     }
 
-    private static void runRead(CrudController controller, UiState state,
-                                TableView<Map<String, Object>> table, Label statusLabel) {
+    private static void runReadAll(CrudController controller, UiState state,
+                                   TableView<Map<String, Object>> table, Label statusLabel) {
+        try {
+            table.getItems().setAll(controller.readTable(state.table()));
+            statusLabel.setText("Datos cargados: " + table.getItems().size());
+        } catch (SQLException ex) {
+            statusLabel.setText("Error: " + ex.getMessage());
+        }
+    }
+
+    private static void runReadByPk(CrudController controller, UiState state,
+                                    TableView<Map<String, Object>> table, Label statusLabel) {
         try {
             var pkValueText = getPkValue(state);
             if (pkValueText == null) {
-                table.getItems().setAll(controller.readTable(state.table()));
-                statusLabel.setText("Datos cargados: " + table.getItems().size());
+                statusLabel.setText("Ingrese PK para leer");
                 return;
             }
             var pkType = (state.pkType() == null || state.pkType().isBlank())
